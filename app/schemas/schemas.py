@@ -25,17 +25,18 @@ class Token(BaseModel):
 class PostCreate(BaseModel):
     title: str
     body: str
-    summary: Optional[str]
-    published: Optional[bool]
+    summary: str | None = None
+    published: bool | None = None
 
 
 class PostOut(BaseModel):
     id: int
     title: str
-    summary: Optional[str]
+    summary: str | None = None
     body: str
     published: bool
-    author: UserOut
+    likes_count: int | None = 0
+    author: UserOut | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -50,7 +51,7 @@ class CommentOut(BaseModel):
     id: int
     content: str
     post_id: int
-    user_id: int
+    author_name: str
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,29 +1,52 @@
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import auth, posts
-from .db.session import engine, Base
-from .api import users
-from .core.config import settings
 from fastapi.staticfiles import StaticFiles
-import os
 
-# Create tables for quick dev (use Alembic for prod)
-Base.metadata.create_all(bind=engine)
+from .api import auth, posts, users
+from .core.config import settings
+from .db.session import Base, engine
+from .utils.logging_config import setup_logging
 
-app = FastAPI(title=settings.PROJECT_NAME)
+# Configure logging before the app object is created.
+setup_logging()
 
 
-if not os.path.exists("app/static"):
-    os.makedirs("app/static")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(exist_ok=True)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup operations
+    # Dev-only: create tables if missing. In prod, use Alembic migrations instead.
+    Base.metadata.create_all(bind=engine)
+
+    yield
+
+    engine.dispose()  # Shutdown operation
+
+
+app = FastAPI(
+    title="Blog API",
+    version="0.1.0",
+    description="Dev environment",
+    lifespan=lifespan,
+)
+
+# If later need cookies/auth cross-origin, list explicit origins and set -> allow_credentials=True.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
