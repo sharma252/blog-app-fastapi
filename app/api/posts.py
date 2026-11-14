@@ -5,24 +5,24 @@ from ..schemas import PostCreate, PostOut, CommentCreate, CommentOut
 from ..repository.crud import (
     get_post,
     get_post_by_id,
-    get_post_by_slug,
     create_post,
     create_comment,
+    likes_count_for_post,
     toggle_like,
     get_comments_for_post,
+    get_posts_with_likes,
 )
 from ..db.session import get_db
 from .deps import get_current_user
 import shutil
 import os
-import uuid
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[PostOut])
 def read_posts(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
-    posts = get_post(db, skip, limit)
+    posts = get_posts_with_likes(db, skip, limit)
     return posts
 
 
@@ -33,6 +33,16 @@ def create_new_post(
     current_user: User = Depends(get_current_user),
 ):
     return create_post(db=db, post=post, user_id=current_user.id)  # type: ignore
+
+
+@router.get("/{post_id}", response_model=PostOut)
+def read_post_by_id(post_id: int, db: Session = Depends(get_db)):
+    post = get_post_by_id(db, id=post_id)
+    if not post:
+        raise HTTPException(404, "Post not found")
+
+    post.likes_count = likes_count_for_post(db, post_id)
+    return post
 
 
 @router.get("/{slug}", response_model=PostOut)

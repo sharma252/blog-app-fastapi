@@ -1,5 +1,4 @@
 from fastapi import HTTPException
-from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
@@ -8,7 +7,6 @@ from zoneinfo import ZoneInfo
 import logging
 
 logger = logging.getLogger(__name__)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 IST = ZoneInfo("Asia/Kolkata")
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")

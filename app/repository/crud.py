@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import desc, func
 from ..models import User, Post, Comment, Like
-from ..schemas import UserCreate, PostCreate, CommentCreate
+from ..schemas import UserCreate, PostCreate, CommentCreate, PostOut
 from ..core.security import hash_password
-from ..utils.slug_generate import generate_slug
 import uuid
 
 
@@ -25,19 +25,40 @@ def create_user(db: Session, user: UserCreate):
 
 
 def get_post(db: Session, skip: int = 0, limit: int = 20):
-    return db.query(Post).offset(skip).limit(limit).all()
+    return (
+        db.query(Post).order_by(Post.updated_at.desc()).offset(skip).limit(limit).all()
+    )
+
+
+def get_posts_with_likes(db: Session, skip: int = 0, limit: int = 20) -> list[PostOut]:
+    results = (
+        db.query(Post, func.count(Like.id).label("likes_count"))
+        .outerjoin(Like, Like.post_id == Post.id)
+        .group_by(Post.id)
+        .order_by(Post.updated_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        PostOut(
+            id=post.id,
+            title=post.title,
+            body=post.body,
+            published=post.published,
+            created_at=post.created_at,
+            updated_at=post.updated_at,
+            likes_count=likes_count,
+        )
+        for post, likes_count in results
+    ]
 
 
 def create_post(db: Session, post: PostCreate, user_id: int):
-    slug = generate_slug(post.title)
-
-    existing_slug = db.query(Post).filter(Post.slug == slug).first()
-    if existing_slug:
-        slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
     db_post = Post(
         title=post.title,
-        slug=slug,
         summary=post.summary,
         body=post.body,
         published=post.published,
@@ -50,16 +71,14 @@ def create_post(db: Session, post: PostCreate, user_id: int):
     return db_post
 
 
-def get_post_by_slug(db: Session, slug: str):
-    return db.query(Post).filter(Post.slug == slug).first()
-
-
 def get_post_by_id(db: Session, id: int):
     return db.query(Post).filter(Post.id == id).first()
 
 
 def create_comment(db: Session, comment: CommentCreate, post_id: int, user_id: int):
-    db_comment = Comment(content=comment.content, post_id=post_id, user_id=user_id)
+    db_comment = Comment(
+        content=comment.content, post_id=post_id, author_name="unanonymous"
+    )
     db.add(db_comment)
     db.commit()
     db.refresh(db_comment)
@@ -87,3 +106,7 @@ def toggle_like(db: Session, post_id: int, user_id: int):
         db.add(new_like)
         db.commit()
         return {"status": "liked"}
+
+
+def likes_count_for_post(db: Session, post_id: int):
+    return db.query(Like).filter(Like.post_id == post_id).count()
